@@ -35,6 +35,9 @@ WORKER_SCHEMA: dict[str, Any] = {
 }
 
 
+REQUIRED_KEYS = tuple(WORKER_SCHEMA["required"])
+
+
 SYSTEM_PROMPT = """You are the Claude worker in a With Claude v1 workflow.
 
 Return only structured analysis/review/planning output. Do not edit files, write files,
@@ -70,6 +73,10 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Print the command and prompt without calling Claude.",
+    )
+    parser.add_argument(
+        "--raw-log-file",
+        help="Optional path for raw Claude stdout/stderr and command metadata.",
     )
     return parser.parse_args()
 
@@ -132,31 +139,80 @@ def blocked(reason: str, evidence: list[str] | None = None) -> dict[str, Any]:
     }
 
 
+def has_worker_contract(value: Any) -> bool:
+    return isinstance(value, dict) and all(key in value for key in REQUIRED_KEYS)
+
+
+def parse_json_value(value: Any) -> Any:
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return None
+    return value
+
+
 def parse_claude_json(stdout: str) -> dict[str, Any]:
     parsed = json.loads(stdout)
-    if all(key in parsed for key in WORKER_SCHEMA["required"]):
+    if has_worker_contract(parsed):
         return parsed
 
+    structured_output = parse_json_value(parsed.get("structured_output"))
+    if has_worker_contract(structured_output):
+        return structured_output
+
     result = parsed.get("result")
+    parsed_result = parse_json_value(result)
+    if has_worker_contract(parsed_result):
+        return parsed_result
+
     if isinstance(result, str):
         result = result.strip()
-        try:
-            nested = json.loads(result)
-        except json.JSONDecodeError:
-            return {
-                "status": "done",
-                "questions": [],
-                "findings": [result],
-                "evidence": [],
-                "risks": ["Claude returned JSON wrapper output but the result field was plain text."],
-                "recommendation": result,
-            }
-        if all(key in nested for key in WORKER_SCHEMA["required"]):
-            return nested
+        if not result:
+            return blocked(
+                "Claude CLI returned an empty result string and no structured_output worker contract.",
+                [stdout[:4000]],
+            )
+        return blocked(
+            "Claude returned plain text instead of the With Claude worker schema.",
+            [result[:2000], stdout[:4000]],
+        )
 
     return blocked(
         "Claude output did not match the With Claude worker schema.",
-        [stdout[:2000]],
+        [stdout[:4000]],
+    )
+
+
+def write_raw_log(
+    raw_log_file: str | None,
+    *,
+    cwd: str,
+    command: list[str],
+    prompt: str,
+    completed: subprocess.CompletedProcess[str],
+) -> None:
+    if not raw_log_file:
+        return
+    log_path = Path(raw_log_file).expanduser()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        json.dumps(
+            {
+                "cwd": cwd,
+                "command": command[:-1] + ["<prompt>"],
+                "prompt": prompt,
+                "returncode": completed.returncode,
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
 
@@ -199,6 +255,13 @@ def main() -> int:
         return 0
 
     if completed.returncode != 0:
+        write_raw_log(
+            args.raw_log_file,
+            cwd=cwd,
+            command=command,
+            prompt=prompt,
+            completed=completed,
+        )
         evidence = []
         if completed.stderr:
             evidence.append(completed.stderr[-2000:])
@@ -211,6 +274,14 @@ def main() -> int:
             )
         )
         return 0
+
+    write_raw_log(
+        args.raw_log_file,
+        cwd=cwd,
+        command=command,
+        prompt=prompt,
+        completed=completed,
+    )
 
     try:
         normalized = parse_claude_json(completed.stdout)

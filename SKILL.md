@@ -45,7 +45,13 @@ Use the bundled script instead of hand-writing a Claude command:
 python3 -B scripts/run_claude_worker.py --cwd "$PWD" --task-file /path/to/task.json
 ```
 
-The script calls Claude Code CLI non-interactively with JSON output and read-only tools by default. It does not pass `--max-budget-usd`. If the script reports `blocked`, continue with the Codex-only result and clearly state that the Claude pass failed or was unavailable.
+The script calls Claude Code CLI non-interactively with JSON output and read-only tools by default. It does not pass `--max-budget-usd`. Claude Code CLI may return a human-readable `result` plus the schema-conforming worker payload in `structured_output`; the script must normalize `structured_output` as the authoritative worker contract. If the script reports `blocked`, continue with the Codex-only result and clearly state that the Claude pass failed or was unavailable.
+
+For debugging Claude worker issues, capture the raw CLI wrapper:
+
+```bash
+python3 -B scripts/run_claude_worker.py --cwd "$PWD" --task-file /path/to/task.json --raw-log-file /tmp/with-claude-worker.json
+```
 
 ## Merge Rules
 
