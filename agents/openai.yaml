@@ -1,0 +1,7 @@
+interface:
+  display_name: "With Claude"
+  short_description: "显式调用的双代理分析、Review 与方案合并技能"
+  default_prompt: "仅当用户显式写出 `$with-claude`、`with-claude` 或明确要求加载 With Claude skill 时使用；不要基于普通 Claude、review、分析或方案相关措辞自动加载。加载后，主代理应并行组织 Codex 子代理与 Claude CLI worker 做只读分析、Review 或方案判断，合并双方问题后一次性向用户追问，最终输出一致结论、分歧、主代理裁决和最终建议。v1 禁止让任一 worker 修改仓库、提交或推送代码。"
+
+policy:
+  allow_implicit_invocation: false
