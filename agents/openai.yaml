@@ -1,7 +1,7 @@
 interface:
   display_name: "With Claude"
-  short_description: "显式调用的双代理分析、Review 与方案合并技能"
-  default_prompt: "仅当用户显式写出 `$with-claude`、`with-claude` 或明确要求加载 With Claude skill 时使用；不要基于普通 Claude、review、分析或方案相关措辞自动加载。加载后，主代理应并行组织 Codex 子代理与 Claude CLI worker 做只读分析、Review 或方案判断，合并双方问题后一次性向用户追问，最终输出一致结论、分歧、主代理裁决和最终建议。v1 禁止让任一 worker 修改仓库、提交或推送代码。"
+  short_description: "显式调用的 Claude 只读参谋、任务编排与方案合并技能"
+  default_prompt: "仅当用户显式写出 `$with-claude`、`with-claude` 或明确要求加载 With Claude skill 时使用；不要基于普通 Claude、review、分析或方案相关措辞自动加载。加载后，当前 host agent 负责任务拆包、worker 调度、进度监控、证据合并和最终裁决，避免与 delegated worker 冗余深挖。Claude CLI worker 始终只读，默认只开放 Read/Grep/Glob/LS，任务包通过 stdin 传入，stdout 只输出最终 worker contract，stderr 输出 progress JSONL 供 host agent 实时观测 Claude 正在读文件、搜索或列目录；不要把这些工具动作摘要表述为 Claude 的私有思维链。默认不创建 task.json 或 progress.jsonl，--progress-log-file 和 --raw-log-file 仅作为显式调试选项。Bash 默认关闭；只有确认当前 Claude CLI 对未匹配 Bash pattern 默认拒绝后，才可显式启用极窄只读 Bash 白名单。跨 cwd 读取必须通过 task packet 的 add_read_dirs 或脚本 --add-dir 显式声明，禁止放开 /、$HOME、/Users 等宽目录。host agent 每 30-60 秒汇总 Claude 与 delegated worker 进展并向用户简报。当前 agent 及其 delegated worker 继承当前会话模式、工具权限和用户授权，不由本 skill 额外降权。最终输出先给总体结论，再简述 Claude 观点、说明采纳情况，只有存在实质分歧时才写与 Claude 的冲突点。"
 
 policy:
   allow_implicit_invocation: false
